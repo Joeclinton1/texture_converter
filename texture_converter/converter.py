@@ -85,16 +85,21 @@ def export_tri_svg(im, file_path, is_sheared, bb_size, w, h, S):
     tree = ET.ElementTree(root)
     tree.write(file_path + '.svg')
 
-def convert_to_sub_textures(w, h, bb_size, texture_filenames, OUT, MODE, DEBUG):
+def convert_to_sub_textures(w, h, bb_size, path, OUT, MODE, DEBUG):
     S = h * 1.5
-    for texture_filename in texture_filenames:
+    OUT = OUT + "/" if OUT else ""
+    for path in path:
+        filename, ext = os.path.basename(path).split(".")
+        if ext != "png":
+            raise "Image must be in PNG format"
+
         # Create output directory if it doesn't exist
-        OUT_DIR = f"{OUT}/{texture_filename}/{MODE}"
+        OUT_DIR = f"{OUT}out/{filename}/{MODE}"
         if not os.path.isdir(OUT_DIR):
             os.makedirs(OUT_DIR)
 
         # Load texture
-        im = cv.imread(texture_filename + ".png", cv.IMREAD_UNCHANGED)
+        im = cv.imread(path, cv.IMREAD_UNCHANGED)
         im = cv.cvtColor(im, cv.COLOR_RGB2RGBA)
         im = cv.resize(im, (w * 2, h * 2))
 

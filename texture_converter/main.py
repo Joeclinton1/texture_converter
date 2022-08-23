@@ -15,10 +15,13 @@ def init_argparse() -> argparse.ArgumentParser:
     parser.add_argument("-b", "--bbsize", nargs=1, default=2048, type=int,
                         help="Size of bounding box in pixels")
 
-    parser.add_argument("-s", "--source", nargs='*', default=["test texture"], type=str,
-                        help="Input textures separated by spaces")
+    parser.add_argument("-s", "--source", nargs='*',
+                        default=[
+                            "test textures/test texture.png",
+                            "test textures/chrome_cat.png"
+                        ], type=str, help="Input textures separated by spaces")
 
-    parser.add_argument("-o", "--out", nargs=1, default="sub textures", type=str,
+    parser.add_argument("-o", "--out", nargs=1, default="", type=str,
                         help="Output directory")
 
     parser.add_argument("-m", "--mode", nargs=1, default="SPLIT", type=str,
