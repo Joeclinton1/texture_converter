@@ -1,5 +1,16 @@
 # Texture converter
-Converts texture images to svg files for use in the Scratch project "Stamped textured tri fill"
+Converts texture images to svg files for use in the Scratch project ["Stamped textured tri fill"](https://scratch.mit.edu/projects/723419988/)
+## Installation
+
+1. Download the source code to your computer by clicking the code button on the main page of this repository then clicking "Download Zip". Extract the zip file after downloading.
+
+2. Install dependencies by running in cmd:
+```
+pip install lxml
+pip install opencv-python
+```
+
+3. (opt) Add python to PATH environment variable by following this [tutorial](https://www.educative.io/answers/how-to-add-python-to-path-variable-in-windows)
 
 ## How to use
 In the command line do:
