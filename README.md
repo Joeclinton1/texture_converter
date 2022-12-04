@@ -20,7 +20,8 @@ Read this first if you have never used python or command line: https://opensourc
 In the command line do:
 1. Cd to the correct directory
 2. Type ```python main.py -s <path to texture>```
-3. The texture wil be outputted to the folder `/Out`
+3. The textures wil be outputted to the folder `/Out/<texture filename>/SPLIT2`
+4. Replace the costumes in the "Stamped textured tri fill" project with the new textures, in the costume editor.
 
 There are optional arguments to change the parameters explained below in the Arguments section
 
