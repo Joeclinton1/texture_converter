@@ -15,6 +15,8 @@ pip install opencv-python
 3. (opt) Add python to PATH environment variable by following this [tutorial](https://www.educative.io/answers/how-to-add-python-to-path-variable-in-windows)
 
 ## How to use
+Read this first if you have never used python or command line: https://opensourceoptions.com/blog/how-to-run-python-scripts-from-the-command-line/
+
 In the command line do:
 1. Cd to the correct directory
 2. Type ```python main.py -s <path to texture>```
