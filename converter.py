@@ -170,8 +170,8 @@ def convert_to_sub_textures(w, h, bb_size, path, OUT, MODE, DEBUG):
         # Export tri svg files
         if DEBUG:
             DEBUG_DIR = f"{OUT}out/{filename}/debug"
-            if not os.path.isdir(OUT_DIR):
-                os.makedirs(OUT_DIR)
+            if not os.path.isdir(DEBUG_DIR):
+                os.makedirs(DEBUG_DIR)
 
             cv.imwrite(f"{DEBUG_DIR}/mask_br.png", br_mask)
             cv.imwrite(f"{DEBUG_DIR}/mask_tl.png", tl_mask)
