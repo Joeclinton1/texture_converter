@@ -17,17 +17,17 @@ def init_argparse() -> argparse.ArgumentParser:
 
     parser.add_argument("-s", "--source", nargs='*',
                         default=[
-                            "test textures/test texture.png",
-                            "test textures/chrome_cat.png"
+                            "test textures/chrome_cat.png",
+                            "test textures/test texture.png"
                         ], type=str, help="Input textures separated by spaces")
 
     parser.add_argument("-o", "--out", nargs=1, default="", type=str,
                         help="Output directory")
 
-    parser.add_argument("-m", "--mode", nargs=1, default="SPLIT", type=str,
-                        help="Mode to use for converting texture to subtextures. Can be 'SPLIT' or 'OVERLAP'")
+    parser.add_argument("-m", "--mode", nargs=1, default="SPLIT2", type=str,
+                        help="Mode to use for converting texture to subtextures. Can be 'SPLIT', 'SPLIT2' or OVERLAP'")
 
-    parser.add_argument("-D", "--debug", nargs=1, default=0, type=int,
+    parser.add_argument("-D", "--debug", nargs=1, default=1, type=int,
                         help="Set to 1, to export a debug image")
     return parser
 
