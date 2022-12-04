@@ -2,6 +2,8 @@
 Converts texture images to svg files for use in the Scratch project ["Stamped textured tri fill"](https://scratch.mit.edu/projects/723419988/)
 ## Installation
 
+0. If you don't have python on your computer download the latest version here: https://www.python.org/downloads/
+
 1. Download the source code to your computer by clicking the code button on the main page of this repository then clicking "Download Zip". Extract the zip file after downloading.
 
 2. Install dependencies by running in cmd:
