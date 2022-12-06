@@ -18,7 +18,7 @@ pip install opencv-python
 Read this first if you have never used python or command line: https://opensourceoptions.com/blog/how-to-run-python-scripts-from-the-command-line/
 
 In the command line do:
-1. Cd to the correct directory
+1. Type ```cd <directory you downloaded this to>```
 2. Type ```python main.py -s <path to texture>```
 3. The textures wil be outputted to the folder `/Out/<texture filename>/SPLIT2`
 4. Replace the costumes in the "Stamped textured tri fill" project with the new textures, in the costume editor.
