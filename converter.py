@@ -24,11 +24,6 @@ def pack_ims(ims):
     return {ori: [im, ""] for ori, im in ims.items()}
 
 
-def apply_gradient(im, dir):
-    gradient_mask = np.tile(np.linspace((dir + 1) / 2, (dir - 1) / -2, im.shape[1]), (im.shape[0], 1))
-    return apply_mask_to_alpha(im, gradient_mask)
-
-
 def transform(im, s, r):
     h, w = im.shape[:2]
     if r:
@@ -46,7 +41,7 @@ def transform(im, s, r):
 
 def export_tri_svg(im, file_path, transform, bb_size, w, h, S):
     use_local_origin = False
-    trans = f'translate({- w / 2} {S-bb_size/2})' if use_local_origin else f''
+    trans = f'translate({- w / 2} {S - bb_size / 2})' if use_local_origin else f''
 
     viewbox = (0, 0, bb_size, bb_size)
     root = ET.Element(
@@ -58,7 +53,7 @@ def export_tri_svg(im, file_path, transform, bb_size, w, h, S):
         viewBox="%s %s %s %s" % viewbox,
         nsmap={"xlink": "http://www.w3.org/1999/xlink"},
         version="1.1",
-        transform = trans
+        transform=trans
     )
     # base64 image
     im_b64 = base64.b64encode(cv.imencode('.png', im)[1]).decode()
@@ -95,7 +90,7 @@ def export_tri_svg(im, file_path, transform, bb_size, w, h, S):
     tree.write(file_path + '.svg')
 
 
-def convert_to_sub_textures(w, h, bb_size, path, OUT, MODE, DEBUG):
+def convert_to_sub_textures(w, h, bb_size, path, OUT, DEBUG):
     S = h * 1.5
     OUT = OUT + "/" if OUT else ""
     for path in path:
@@ -104,68 +99,45 @@ def convert_to_sub_textures(w, h, bb_size, path, OUT, MODE, DEBUG):
             raise "Image must be in PNG format"
 
         # Create output directory if it doesn't exist
-        OUT_DIR = f"{OUT}out/{filename}/{MODE}"
+        OUT_DIR = f"{OUT}out/{filename}"
         if not os.path.isdir(OUT_DIR):
             os.makedirs(OUT_DIR)
 
         # Load texture
         im = cv.imread(path, cv.IMREAD_UNCHANGED)
-        print(cv.cvtColor(im, cv.COLOR_RGB2GRAY).shape)
         im = cv.cvtColor(im, cv.COLOR_RGB2RGBA)
         im = cv.resize(im, (w * 2, h * 2))
 
-        # split triangle if SPLIT else apply gradient
+        br_mask = np.rot90(np.tri(*im.shape[:2], k=1, dtype=int)) * 255
+        tl_mask = np.rot90(br_mask, k=2)
 
-        if MODE in ["SPLIT", "SPLIT2"]:
-            if MODE == "SPLIT":
-                # load alpha masks
-                tl_mask = cv.cvtColor(cv.imread("alpha masks/tl_alpha_mask_curved.png", cv.IMREAD_UNCHANGED),
-                                      cv.COLOR_RGB2GRAY)
-                br_mask = cv.cvtColor(cv.imread("alpha masks/br_alpha_mask_curved.png", cv.IMREAD_UNCHANGED),
-                                      cv.COLOR_RGB2GRAY)
-            else:
-                br_mask = np.rot90(np.tri(*im.shape[:2], k=1, dtype=int)) * 255
-                tl_mask = np.rot90(br_mask, k=2)
+        # Cut texture along diagonal into two right angled tris | □ ⟶ ◸◿
+        ims = pack_ims(cut_img_into_2_tris(im, (tl_mask, br_mask)))
 
-            # Cut texture along diagonal into two right angled tris | □ ⟶ ◸◿
-            ims = pack_ims(cut_img_into_2_tris(im, (tl_mask, br_mask)))
+        # rotate top left so that
+        ims["tl"][0] = cv2.rotate(ims["tl"][0], cv2.ROTATE_180)
 
-            # rotate top left so that
-            ims["tl"][0] = cv2.rotate(ims["tl"][0], cv2.ROTATE_180)
+        # transform the right angled triangles into equilateral ones
 
-            if MODE == "SPLIT":
-                rot90_ims = {ori + "_rot90": (transform(im[0], (1, 0), (-90, (0.5, 0.5))), im[1])
-                             for ori, im in ims.items()
-                             }
-                sheared_ims = {ori: (im[0], im[1] + 'skewX(45) ') for ori, im in rot90_ims.items()}
-                ims = rot90_ims | sheared_ims
+        src = [[w, h], [w, 0], [0, 0], [0, h]]
+        dst = [[w, h], [w + -1 / 2 * w, (1 - 3 ** (1 / 2) / 2) * h], [-1 / 2 * w, (1 - 3 ** (1 / 2) / 2) * h],
+               [0, h]]
+        M = cv2.getPerspectiveTransform(np.float32(src), np.float32(dst))
+        M2 = ' '.join(map(str, [M[0, 0], M[1, 0], M[0, 1], M[1, 1], M[0, 2], M[1, 2]]))
 
-            else:
-                # transform the right angled triangles into equilateral ones
+        trans = f'matrix({M2}) '
+        ims = {ori: (im[0], im[1] + trans) for ori, im in ims.items()}
 
-                src = [[w, h], [w, 0], [0, 0], [0, h]]
-                dst = [[w, h], [w + -1 / 2 * w, (1 - 3 ** (1 / 2) / 2) * h], [-1 / 2 * w, (1 - 3 ** (1 / 2) / 2) * h],
-                       [0, h]]
-                M = cv2.getPerspectiveTransform(np.float32(src), np.float32(dst))
-                M2 = ' '.join(map(str, [M[0, 0], M[1, 0], M[0, 1], M[1, 1], M[0, 2], M[1, 2]]))
-
-                trans = f'matrix({M2}) '
-                ims = {ori: (im[0], im[1] + trans) for ori, im in ims.items()}
-
-                # create two additional triangles. One rotated 60° the other 120°
-                # center = [w*2*0.75, h*2*(3 ** (1 / 2) / 2)*(1 - 3 ** (1 / 2) / 6)]
-                center = [w * 2 * 0.75, 82.5]
-                trans = f'translate({w * 2 * -1 / 2 / 2} {h * 2 * (1 - 3 ** (1 / 2) / 2) / 2})'
-                a = {ori + "_a": (im[0], trans + im[1]) for ori, im in ims.items()}
-                b = {ori + "_b": (im[0], trans + f'rotate(-120 {center[0]} {center[1]})' + im[1]) for ori, im in
-                     ims.items()}
-                c = {ori + "_c": (im[0], trans + f'rotate(120 {center[0]} {center[1]})' + im[1]) for ori, im in
-                     ims.items()}
-                ims = a | b | c
-        else:
-            # Create quads with gradient in middle
-            ims = {"l": apply_gradient(im, 1), "r": apply_gradient(im, -1)}
-            ims = pack_ims(ims)
+        # create two additional triangles. One rotated 60° the other 120°
+        # center = [w*2*0.75, h*2*(3 ** (1 / 2) / 2)*(1 - 3 ** (1 / 2) / 6)]
+        center = [w * 2 * 0.75, 82.5]
+        trans = f'translate({w * 2 * -1 / 2 / 2} {h * 2 * (1 - 3 ** (1 / 2) / 2) / 2})'
+        a = {ori + "_a": (im[0], trans + im[1]) for ori, im in ims.items()}
+        b = {ori + "_b": (im[0], trans + f'rotate(-120 {center[0]} {center[1]})' + im[1]) for ori, im in
+             ims.items()}
+        c = {ori + "_c": (im[0], trans + f'rotate(120 {center[0]} {center[1]})' + im[1]) for ori, im in
+             ims.items()}
+        ims = a | b | c
 
         # Export tri svg files
         if DEBUG:
