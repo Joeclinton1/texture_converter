@@ -17,8 +17,13 @@ def init_argparse() -> argparse.ArgumentParser:
                         help="Size of bounding box in pixels")
 
     parser.add_argument("-S", "--displacement", nargs=1,
-                        default=1, type=int,
+                        default=1.5, type=int,
                         help="Displacement of triangle in multiples of it's height from bounding box")
+
+    parser.add_argument("-SF", "--scalefactor", nargs=1,
+                        default=0.25, type=int,
+                        help="Scale factor to apply to costume")
+
 
     parser.add_argument("-s", "--source", nargs='*',
                         default=[
@@ -38,4 +43,4 @@ if __name__ == "__main__":
     parser = init_argparse()
     args = parser.parse_args()
 
-    convert_files(args.height, args.displacement, args.bbsize, args.source, args.out, args.debug)
+    convert_files(args.height, args.displacement, args.bbsize, args.scalefactor, args.source, args.out, args.debug)

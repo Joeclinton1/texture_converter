@@ -12,6 +12,7 @@ def load_and_preprocess_image(path, w, h):
     im = cv2.cvtColor(im, cv2.COLOR_RGB2RGBA)
     return cv2.resize(im, (w, h))
 
+
 def apply_mask_to_alpha(im, mask):
     alpha_mask = np.concatenate([np.ones((*mask.shape, 3), dtype='uint8'), mask.reshape(*mask.shape, 1)], axis=2)
     return im * alpha_mask
@@ -26,6 +27,7 @@ def split_img_along_anti_diagonal(im):
                "tl": apply_mask_to_alpha(im, tl_mask),
                "br": apply_mask_to_alpha(im, br_mask)
            }, (tl_mask, br_mask)
+
 
 def generate_STTF_from_image(im, original_h):
     w, h = im.shape[0], im.shape[1]
@@ -72,9 +74,7 @@ def generate_STTF_from_image(im, original_h):
     return transformed_triangles, masks
 
 
-def export_tri_svg(im, file_path, transform, bb_size, w, h, S, DEBUG):
-    scale_factor = 1
-
+def export_tri_svg(im, file_path, transform, bb_size, w, h, S, scale_factor, DEBUG):
     # Adjusting for scale
     bb_size *= scale_factor
     w *= scale_factor
@@ -106,32 +106,36 @@ def export_tri_svg(im, file_path, transform, bb_size, w, h, S, DEBUG):
         height=f"{im.shape[0]}px",
         x="0",
         y="0",
-        transform=f'translate({bb_size / 2 - w / 2} {bb_size - S*h - h}) '
+        transform=f'translate({bb_size / 2 - w / 2} {bb_size - S * h - h}) '
                   f'scale({w / im.shape[1]} {w / im.shape[1]}) '
                   + transform,
         fill="#000000",
         preserveAspectRatio="none"
     )
 
-    # transparent bounding rect
+    # transparent bounding circle
     ET.SubElement(
         root,
-        "path",
-        {"fill-opacity": "0"},
-        fill="#d40000",
-        d=f"M0,{bb_size}v-{bb_size}h{bb_size}v{bb_size}z",
+        "circle",
+        {"opacity": "1" if DEBUG else "0"},
+        cx="50%",
+        cy="50%",
+        r="50%",
+        fill="none",
+        stroke="red",
+        strokeWidth="3px",
     )
 
     if DEBUG:
         # debug triangle
         x1 = bb_size / 2
-        y1 = bb_size - S*h - h
+        y1 = bb_size - S * h - h
         x2 = bb_size / 2 + h / sqrt(3)
-        y2 = bb_size - S*h
+        y2 = bb_size - S * h
         x3 = bb_size / 2 - h / sqrt(3)
-        y3 = bb_size - S*h
+        y3 = bb_size - S * h
 
-        # transparent bounding rect
+        # debug triangle
         ET.SubElement(
             root,
             "polygon",
@@ -142,25 +146,15 @@ def export_tri_svg(im, file_path, transform, bb_size, w, h, S, DEBUG):
             points=f"{x1},{y1} {x2},{y2} {x3},{y3}",
         )
 
-        # debug circle
-        ET.SubElement(
-            root,
-            "circle",
-            cx="50%",
-            cy="50%",
-            r="50%",
-            fill="none",
-            stroke="red",
-            strokeWidth="3px"
-        )
+
 
     tree = ET.ElementTree(root)
     tree.write(file_path + '.svg')
 
 
-def convert_files(h,S, bb_size, paths, OUT, DEBUG):
+def convert_files(h, S, bb_size, scale_factor, source_paths, OUT, DEBUG):
     OUT = OUT + "/" if OUT != "" else ""
-    for path in paths:
+    for path in source_paths:
         filename, ext = os.path.splitext(os.path.basename(path))
         if ext != ".png":
             raise ValueError("Image must be in PNG format")
@@ -176,7 +170,7 @@ def convert_files(h,S, bb_size, paths, OUT, DEBUG):
         tris, masks = generate_STTF_from_image(im, h)
 
         for ori, tri in tris.items():
-            export_tri_svg(tri[0], f"{OUT_DIR}/{ori}", tri[1], bb_size, h * 2 / sqrt(3), h, S, DEBUG)
+            export_tri_svg(tri[0], f"{OUT_DIR}/{ori}", tri[1], bb_size, h * 2 / sqrt(3), h, S, scale_factor, DEBUG)
 
         if DEBUG:
             # Debug triangle splitting masks
