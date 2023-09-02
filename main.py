@@ -1,5 +1,6 @@
-from converter import convert_to_sub_textures
+from converter import convert_files
 import argparse
+import os
 
 
 def init_argparse() -> argparse.ArgumentParser:
@@ -9,8 +10,8 @@ def init_argparse() -> argparse.ArgumentParser:
     )
 
     # add arguments
-    parser.add_argument("-d", "--dim", nargs=2, default=[64, 64], type=int,
-                        help="Width and height in pixels of output image. def")
+    parser.add_argument("-H", "--height", nargs=1, default=64, type=int,
+                        help="Height in pixels of triangle")
 
     parser.add_argument("-b", "--bbsize", nargs=1, default=2048, type=int,
                         help="Size of bounding box in pixels")
@@ -32,4 +33,5 @@ def init_argparse() -> argparse.ArgumentParser:
 if __name__ == "__main__":
     parser = init_argparse()
     args = parser.parse_args()
-    convert_to_sub_textures(*args.dim, args.bbsize, args.source, args.out, args.debug)
+
+    convert_files(args.height, args.bbsize, args.source, args.out, args.debug)

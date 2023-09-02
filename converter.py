@@ -1,47 +1,85 @@
 import cv2
-import cv2 as cv
 import numpy as np
 from lxml import etree as ET
 import base64
 import os
-from math import atan, degrees
+from math import sqrt
+from cairosvg import svg2png
 
+
+def load_and_preprocess_image(path, w, h):
+    im = cv2.imread(path, cv2.IMREAD_UNCHANGED)
+    im = cv2.cvtColor(im, cv2.COLOR_RGB2RGBA)
+    return cv2.resize(im, (w, h))
 
 def apply_mask_to_alpha(im, mask):
     alpha_mask = np.concatenate([np.ones((*mask.shape, 3), dtype='uint8'), mask.reshape(*mask.shape, 1)], axis=2)
     return im * alpha_mask
 
 
-def cut_img_into_2_tris(im, masks):
-    masks = [cv.resize(mask, im.shape[:2]) / 255 for mask in masks]
+def split_img_along_anti_diagonal(im):
+    br_mask = np.rot90(np.tri(*im.shape[:2], k=1, dtype=int)) * 255
+    tl_mask = np.rot90(br_mask, k=2)
+
+    br_mask, tl_mask = [cv2.resize(mask, im.shape[:2]) / 255 for mask in [br_mask, tl_mask]]
     return {
-        "tl": apply_mask_to_alpha(im, masks[0]),
-        "br": apply_mask_to_alpha(im, masks[1])
+               "tl": apply_mask_to_alpha(im, tl_mask),
+               "br": apply_mask_to_alpha(im, br_mask)
+           }, (tl_mask, br_mask)
+
+def generate_STTF_from_image(im, original_h):
+    w, h = im.shape[0], im.shape[1]
+    triangles, masks = split_img_along_anti_diagonal(im)
+
+    # Rotate top-left triangle to match top-right
+    triangles["tl"] = cv2.rotate(triangles["tl"], cv2.ROTATE_180)
+
+    # Equilateral triangle transformation parameters
+    SRC_POINTS = [[w, h], [w, 0], [0, 0], [0, h]]
+    equilateral_triangle_height = h * sqrt(3) / 2
+    DST_POINTS = [
+        [w, h],  # Bottom-right corner
+        [w + -1 / 2 * w, h - equilateral_triangle_height],  # Top vertex of the equilateral triangle
+        [-1 / 2 * w, h - equilateral_triangle_height],  # Left vertex of the equilateral triangle at the offset height
+        [0, h]  # Bottom-left corner
+    ]
+
+    # we use a matrix transformation via svg to avoid blurring the triangle.
+    M = cv2.getPerspectiveTransform(np.float32(SRC_POINTS), np.float32(DST_POINTS))
+    M = ' '.join(map(str, [M[0, 0], M[1, 0], M[0, 1], M[1, 1], M[0, 2], M[1, 2]]))
+
+    # Transformation prefix for each triangle orientation
+    CENTER = (w / 2, h - 1 / 3 * original_h)
+    # CENTER = (w / 2, 52)
+    # STR_TRANS = f"translate({w * -0.25} {h * (1 - 3 ** 0.5 / 2) * 0.5})"
+    STR_TRANS = f"translate(0 {-(h - equilateral_triangle_height)})"
+    STR_SKEW = f"matrix({M})"
+    STR_ROT1 = f"rotate(-120 {CENTER[0]} {CENTER[1]})"
+    STR_ROT2 = f"rotate(120 {CENTER[0]} {CENTER[1]})"
+    TRANSFORM_PREFIXES = {
+        "_a": f'{STR_TRANS} {STR_SKEW}',
+        "_b": f'{STR_TRANS} {STR_ROT1} {STR_SKEW}',
+        "_c": f'{STR_TRANS} {STR_ROT2} {STR_SKEW}'
     }
 
+    # Generate the transformed triangles dictionary
+    transformed_triangles = {
+        ori + suffix: (img, prefix)
+        for ori, img in triangles.items()
+        for suffix, prefix in TRANSFORM_PREFIXES.items()
+    }
 
-def pack_ims(ims):
-    return {ori: [im, ""] for ori, im in ims.items()}
-
-
-def transform(im, s, r):
-    h, w = im.shape[:2]
-    if r:
-        rotate_matrix = cv2.getRotationMatrix2D(center=(w * r[1][0], h * r[1][1]), angle=r[0], scale=1)
-        im = cv2.warpAffine(src=im, M=rotate_matrix, dsize=(w, h))
-
-    if s:
-        src = [[w, h], [w, 0], [0, 0], [0, h]]
-        dst = [[w, h], [w + s[0] * w, s[1] * h], [s[0] * w, s[1] * h], [0, h]]
-        M = cv2.getPerspectiveTransform(np.float32(src), np.float32(dst))
-        im = cv2.warpPerspective(im, M, (w, h))
-
-    return im
+    return transformed_triangles, masks
 
 
-def export_tri_svg(im, file_path, transform, bb_size, w, h, S):
-    use_local_origin = False
-    trans = f'translate({- w / 2} {S - bb_size / 2})' if use_local_origin else f''
+def export_tri_svg(im, file_path, transform, bb_size, w, h, S, DEBUG):
+    scale_factor = 1
+
+    # Adjusting for scale
+    bb_size *= scale_factor
+    w *= scale_factor
+    h *= scale_factor
+    S *= scale_factor
 
     viewbox = (0, 0, bb_size, bb_size)
     root = ET.Element(
@@ -53,10 +91,9 @@ def export_tri_svg(im, file_path, transform, bb_size, w, h, S):
         viewBox="%s %s %s %s" % viewbox,
         nsmap={"xlink": "http://www.w3.org/1999/xlink"},
         version="1.1",
-        transform=trans
     )
     # base64 image
-    im_b64 = base64.b64encode(cv.imencode('.png', im)[1]).decode()
+    im_b64 = base64.b64encode(cv2.imencode('.png', im)[1]).decode()
 
     # image
     ET.SubElement(
@@ -71,7 +108,7 @@ def export_tri_svg(im, file_path, transform, bb_size, w, h, S):
         x="0",
         y="0",
         transform=f'translate({bb_size / 2 - w / 2} {bb_size - S - h}) '
-                  f'scale({w / im.shape[1]} {h / im.shape[0]}) '
+                  f'scale({w / im.shape[1]} {w / im.shape[1]}) '
                   + transform,
         fill="#000000",
         preserveAspectRatio="none"
@@ -86,70 +123,71 @@ def export_tri_svg(im, file_path, transform, bb_size, w, h, S):
         d=f"M0,{bb_size}v-{bb_size}h{bb_size}v{bb_size}z",
     )
 
+    if DEBUG:
+        # debug triangle
+        x1 = bb_size / 2
+        y1 = bb_size - S - h
+        x2 = bb_size / 2 + h / sqrt(3)
+        y2 = bb_size - S
+        x3 = bb_size / 2 - h / sqrt(3)
+        y3 = bb_size - S
+
+        # transparent bounding rect
+        ET.SubElement(
+            root,
+            "polygon",
+            fill="none",
+            stroke="red",
+            opacity="0.5",
+            strokeWidth="1px",
+            points=f"{x1},{y1} {x2},{y2} {x3},{y3}",
+        )
+
+        # debug circle
+        ET.SubElement(
+            root,
+            "circle",
+            cx="50%",
+            cy="50%",
+            r="50%",
+            fill="none",
+            stroke="red",
+            strokeWidth="3px"
+        )
+
     tree = ET.ElementTree(root)
     tree.write(file_path + '.svg')
 
 
-def convert_to_sub_textures(w, h, bb_size, path, OUT, DEBUG):
+def convert_files(h, bb_size, paths, OUT, DEBUG):
     S = h * 1.5
-    OUT = OUT + "/" if OUT else ""
-    for path in path:
-        filename, ext = os.path.basename(path).split(".")
-        if ext != "png":
-            raise "Image must be in PNG format"
+    OUT = OUT + "/" if OUT != "" else ""
+    for path in paths:
+        filename, ext = os.path.splitext(os.path.basename(path))
+        if ext != ".png":
+            raise ValueError("Image must be in PNG format")
 
-        # Create output directory if it doesn't exist
+        # Create output and debug directory
         OUT_DIR = f"{OUT}out/{filename}"
-        if not os.path.isdir(OUT_DIR):
-            os.makedirs(OUT_DIR)
+        os.makedirs(OUT_DIR, exist_ok=True)
 
-        # Load texture
-        im = cv.imread(path, cv.IMREAD_UNCHANGED)
-        im = cv.cvtColor(im, cv.COLOR_RGB2RGBA)
-        im = cv.resize(im, (w * 2, h * 2))
-
-        br_mask = np.rot90(np.tri(*im.shape[:2], k=1, dtype=int)) * 255
-        tl_mask = np.rot90(br_mask, k=2)
-
-        # Cut texture along diagonal into two right angled tris | □ ⟶ ◸◿
-        ims = pack_ims(cut_img_into_2_tris(im, (tl_mask, br_mask)))
-
-        # rotate top left so that
-        ims["tl"][0] = cv2.rotate(ims["tl"][0], cv2.ROTATE_180)
-
-        # transform the right angled triangles into equilateral ones
-
-        src = [[w, h], [w, 0], [0, 0], [0, h]]
-        dst = [[w, h], [w + -1 / 2 * w, (1 - 3 ** (1 / 2) / 2) * h], [-1 / 2 * w, (1 - 3 ** (1 / 2) / 2) * h],
-               [0, h]]
-        M = cv2.getPerspectiveTransform(np.float32(src), np.float32(dst))
-        M2 = ' '.join(map(str, [M[0, 0], M[1, 0], M[0, 1], M[1, 1], M[0, 2], M[1, 2]]))
-
-        trans = f'matrix({M2}) '
-        ims = {ori: (im[0], im[1] + trans) for ori, im in ims.items()}
-
-        # create two additional triangles. One rotated 60° the other 120°
-        # center = [w*2*0.75, h*2*(3 ** (1 / 2) / 2)*(1 - 3 ** (1 / 2) / 6)]
-        center = [w * 2 * 0.75, 82.5]
-        trans = f'translate({w * 2 * -1 / 2 / 2} {h * 2 * (1 - 3 ** (1 / 2) / 2) / 2})'
-        a = {ori + "_a": (im[0], trans + im[1]) for ori, im in ims.items()}
-        b = {ori + "_b": (im[0], trans + f'rotate(-120 {center[0]} {center[1]})' + im[1]) for ori, im in
-             ims.items()}
-        c = {ori + "_c": (im[0], trans + f'rotate(120 {center[0]} {center[1]})' + im[1]) for ori, im in
-             ims.items()}
-        ims = a | b | c
-
-        # Export tri svg files
         if DEBUG:
             DEBUG_DIR = f"{OUT}out/{filename}/debug"
-            if not os.path.isdir(DEBUG_DIR):
-                os.makedirs(DEBUG_DIR)
 
-            cv.imwrite(f"{DEBUG_DIR}/mask_br.png", br_mask)
-            cv.imwrite(f"{DEBUG_DIR}/mask_tl.png", tl_mask)
-            cv.imwrite(f"{DEBUG_DIR}/tri br a.png", ims["br_a"][0])
-            cv.imwrite(f"{DEBUG_DIR}/tri tl a.png", ims["tl_a"][0])
-            print([im[1] for im in [ims["br_a"]]])
+        im = load_and_preprocess_image(path, int(h * 2 / sqrt(3)), int(h * 2 / sqrt(3)))
+        tris, masks = generate_STTF_from_image(im, h)
 
-        for ori, pack_im in ims.items():
-            export_tri_svg(pack_im[0], f"{OUT_DIR}/{filename}_{ori}", pack_im[1], bb_size, w, h, S)
+        for ori, tri in tris.items():
+            export_tri_svg(tri[0], f"{OUT_DIR}/{ori}", tri[1], bb_size, h * 2 / sqrt(3), h, S, DEBUG)
+
+        if DEBUG:
+            # Debug triangle splitting masks
+            cv2.imwrite(f"{DEBUG_DIR}/mask_br.png", masks[0])
+            cv2.imwrite(f"{DEBUG_DIR}/mask_tl.png", masks[1])
+
+            cv2.imwrite(f"{DEBUG_DIR}/tri br_a.png", tris["br_a"][0])
+
+            # Debug triangle outputs
+            for tri_id in ["br_a", "br_b", "br_c"]:
+                debug_svg = open(f"{OUT_DIR}/{tri_id}.svg").read()
+                svg2png(bytestring=debug_svg, write_to=f"{DEBUG_DIR}/svg {tri_id}.png")
