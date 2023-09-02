@@ -16,6 +16,10 @@ def init_argparse() -> argparse.ArgumentParser:
     parser.add_argument("-b", "--bbsize", nargs=1, default=2048, type=int,
                         help="Size of bounding box in pixels")
 
+    parser.add_argument("-S", "--displacement", nargs=1,
+                        default=1, type=int,
+                        help="Displacement of triangle in multiples of it's height from bounding box")
+
     parser.add_argument("-s", "--source", nargs='*',
                         default=[
                             "test textures/chrome_cat.png",
@@ -34,4 +38,4 @@ if __name__ == "__main__":
     parser = init_argparse()
     args = parser.parse_args()
 
-    convert_files(args.height, args.bbsize, args.source, args.out, args.debug)
+    convert_files(args.height, args.displacement, args.bbsize, args.source, args.out, args.debug)

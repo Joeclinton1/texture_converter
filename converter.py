@@ -79,7 +79,6 @@ def export_tri_svg(im, file_path, transform, bb_size, w, h, S, DEBUG):
     bb_size *= scale_factor
     w *= scale_factor
     h *= scale_factor
-    S *= scale_factor
 
     viewbox = (0, 0, bb_size, bb_size)
     root = ET.Element(
@@ -107,7 +106,7 @@ def export_tri_svg(im, file_path, transform, bb_size, w, h, S, DEBUG):
         height=f"{im.shape[0]}px",
         x="0",
         y="0",
-        transform=f'translate({bb_size / 2 - w / 2} {bb_size - S - h}) '
+        transform=f'translate({bb_size / 2 - w / 2} {bb_size - S*h - h}) '
                   f'scale({w / im.shape[1]} {w / im.shape[1]}) '
                   + transform,
         fill="#000000",
@@ -126,11 +125,11 @@ def export_tri_svg(im, file_path, transform, bb_size, w, h, S, DEBUG):
     if DEBUG:
         # debug triangle
         x1 = bb_size / 2
-        y1 = bb_size - S - h
+        y1 = bb_size - S*h - h
         x2 = bb_size / 2 + h / sqrt(3)
-        y2 = bb_size - S
+        y2 = bb_size - S*h
         x3 = bb_size / 2 - h / sqrt(3)
-        y3 = bb_size - S
+        y3 = bb_size - S*h
 
         # transparent bounding rect
         ET.SubElement(
@@ -159,8 +158,7 @@ def export_tri_svg(im, file_path, transform, bb_size, w, h, S, DEBUG):
     tree.write(file_path + '.svg')
 
 
-def convert_files(h, bb_size, paths, OUT, DEBUG):
-    S = h * 1.5
+def convert_files(h,S, bb_size, paths, OUT, DEBUG):
     OUT = OUT + "/" if OUT != "" else ""
     for path in paths:
         filename, ext = os.path.splitext(os.path.basename(path))
