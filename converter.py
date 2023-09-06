@@ -13,11 +13,6 @@ def load_and_preprocess_image(path, w, h):
     return cv2.resize(im, (w, h))
 
 
-def apply_mask_to_alpha(im, mask):
-    alpha_mask = np.concatenate([np.ones((*mask.shape, 3), dtype='uint8'), mask.reshape(*mask.shape, 1)], axis=2)
-    return im * alpha_mask
-
-
 def generate_STTF_from_image(im, original_h):
     w, h = im.shape[0], im.shape[1]
 
@@ -126,6 +121,7 @@ def export_tri_svg(im, file_path, transform, bb_size, w, h, S, scale_factor, DEB
         stroke="red",
         strokeWidth="3px",
     )
+
     # triangle
     x1 = bb_size / 2
     y1 = bb_size - S * h - h
@@ -133,8 +129,6 @@ def export_tri_svg(im, file_path, transform, bb_size, w, h, S, scale_factor, DEB
     y2 = bb_size - S * h
     x3 = bb_size / 2 - h / sqrt(3)
     y3 = bb_size - S * h
-
-
 
     clip_triangle = '<polygon fill="none" stroke="red" opacity="0.5" stroke-width="0.25px" ' \
                     f'points="' \
@@ -155,11 +149,7 @@ def export_tri_svg(im, file_path, transform, bb_size, w, h, S, scale_factor, DEB
         # debug triangle
         # triangle = '<polygon fill="none" stroke="red" opacity="0.5" strokeWidth="5px" ' \
         #            f'points="{x1},{y1} {x2},{y2} {x3},{y3}" />'
-        triangle = '<polygon fill="none" stroke="red" opacity="0.5" stroke-width="0.25px" ' \
-                        f'points="' \
-                        f'{x1},{y1 - offset * tan(pi / 3)} ' \
-                        f'{x2 + offset * tan(pi / 3)},{y2 + offset} ' \
-                        f'{x3 - offset * tan(pi / 3)},{y3 + offset}" />'
+        triangle = clip_triangle
         root.append(ET.fromstring(triangle))
 
     tree = ET.ElementTree(root)
