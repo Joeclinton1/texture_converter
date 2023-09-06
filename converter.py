@@ -3,7 +3,7 @@ import numpy as np
 from lxml import etree as ET
 import base64
 import os
-from math import sqrt
+from math import sqrt, tan, pi
 from cairosvg import svg2png
 
 
@@ -31,9 +31,9 @@ def split_img_along_anti_diagonal(im):
 
 def generate_STTF_from_image(im, original_h):
     w, h = im.shape[0], im.shape[1]
-    triangles, masks = split_img_along_anti_diagonal(im)
 
-    # Rotate top-left triangle to match top-right
+    # Create our placeholder top left and top right images
+    triangles = {"tl": im, "br": im[:]}
     triangles["tl"] = cv2.rotate(triangles["tl"], cv2.ROTATE_180)
 
     # Equilateral triangle transformation parameters
@@ -71,14 +71,15 @@ def generate_STTF_from_image(im, original_h):
         for suffix, prefix in TRANSFORM_PREFIXES.items()
     }
 
-    return transformed_triangles, masks
+    return transformed_triangles
 
 
-def export_tri_svg(im, file_path, transform, bb_size, w, h, S, scale_factor, DEBUG):
+def export_tri_svg(im, file_path, transform, bb_size, w, h, S, scale_factor, DEBUG, is_flipped):
     # Adjusting for scale
     bb_size *= scale_factor
     w *= scale_factor
     h *= scale_factor
+    offset= 1*scale_factor
 
     viewbox = (0, 0, bb_size, bb_size)
     root = ET.Element(
@@ -94,23 +95,34 @@ def export_tri_svg(im, file_path, transform, bb_size, w, h, S, scale_factor, DEB
     # base64 image
     im_b64 = base64.b64encode(cv2.imencode('.png', im)[1]).decode()
 
+    # group for clipping
+    clipping_group = ET.SubElement(
+        root,
+        "g",
+        {"clip-path": "url(#cut-off-bottom)"}
+    )
+
+    # y position at bottom if not flipped else at top
+    y_trans = bb_size - S * h - h if not is_flipped else S * h
     # image
     ET.SubElement(
-        root,
+        clipping_group,
         "image",
         {
             ET.QName("http://www.w3.org/1999/xlink", "href"): f"data:image/png;base64,{im_b64}",
-            "stroke-width": "1"
+            "stroke-width": "1",
+
         },
         width=f"{im.shape[1]}px",
         height=f"{im.shape[0]}px",
         x="0",
         y="0",
-        transform=f'translate({bb_size / 2 - w / 2} {bb_size - S * h - h}) '
+        transform=f'translate({bb_size / 2 - w / 2} {y_trans}) '
                   f'scale({w / im.shape[1]} {w / im.shape[1]}) '
                   + transform,
         fill="#000000",
-        preserveAspectRatio="none"
+        preserveAspectRatio="none",
+
     )
 
     # transparent bounding circle
@@ -125,34 +137,47 @@ def export_tri_svg(im, file_path, transform, bb_size, w, h, S, scale_factor, DEB
         stroke="red",
         strokeWidth="3px",
     )
+    # triangle
+    x1 = bb_size / 2
+    y1 = bb_size - S * h - h
+    x2 = bb_size / 2 + h / sqrt(3)
+    y2 = bb_size - S * h
+    x3 = bb_size / 2 - h / sqrt(3)
+    y3 = bb_size - S * h
+
+
+
+    clip_triangle = '<polygon fill="none" stroke="red" opacity="0.5" stroke-width="0.25px" ' \
+                    f'points="' \
+                    f'{x1},{y1 - offset * tan(pi / 3)} ' \
+                    f'{x2 + offset * tan(pi / 3)},{y2 + offset} ' \
+                    f'{x3 - offset * tan(pi / 3)},{y3 + offset}" />'
+
+    clip_path = ET.fromstring(f'''
+        <defs xmlns="http://www.w3.org/2000/svg">
+            <clipPath id="cut-off-bottom">
+               {clip_triangle}
+            </clipPath>
+        </defs>
+    ''')
+    root.append(clip_path)
 
     if DEBUG:
         # debug triangle
-        x1 = bb_size / 2
-        y1 = bb_size - S * h - h
-        x2 = bb_size / 2 + h / sqrt(3)
-        y2 = bb_size - S * h
-        x3 = bb_size / 2 - h / sqrt(3)
-        y3 = bb_size - S * h
-
-        # debug triangle
-        ET.SubElement(
-            root,
-            "polygon",
-            fill="none",
-            stroke="red",
-            opacity="0.5",
-            strokeWidth="1px",
-            points=f"{x1},{y1} {x2},{y2} {x3},{y3}",
-        )
-
-
+        # triangle = '<polygon fill="none" stroke="red" opacity="0.5" strokeWidth="5px" ' \
+        #            f'points="{x1},{y1} {x2},{y2} {x3},{y3}" />'
+        triangle = '<polygon fill="none" stroke="red" opacity="0.5" stroke-width="0.25px" ' \
+                        f'points="' \
+                        f'{x1},{y1 - offset * tan(pi / 3)} ' \
+                        f'{x2 + offset * tan(pi / 3)},{y2 + offset} ' \
+                        f'{x3 - offset * tan(pi / 3)},{y3 + offset}" />'
+        root.append(ET.fromstring(triangle))
 
     tree = ET.ElementTree(root)
     tree.write(file_path + '.svg')
 
 
-def convert_files(h, S, bb_size, scale_factor, source_paths, OUT, DEBUG):
+def convert_files(h, S, bb_size, scale_factor, source_paths, OUT, is_debug, is_flipped):
     OUT = OUT + "/" if OUT != "" else ""
     for path in source_paths:
         filename, ext = os.path.splitext(os.path.basename(path))
@@ -163,20 +188,27 @@ def convert_files(h, S, bb_size, scale_factor, source_paths, OUT, DEBUG):
         OUT_DIR = f"{OUT}out/{filename}"
         os.makedirs(OUT_DIR, exist_ok=True)
 
-        if DEBUG:
+        if is_debug:
             DEBUG_DIR = f"{OUT}out/{filename}/debug"
 
         im = load_and_preprocess_image(path, int(h * 2 / sqrt(3)), int(h * 2 / sqrt(3)))
-        tris, masks = generate_STTF_from_image(im, h)
+        tris = generate_STTF_from_image(im, h)
 
         for ori, tri in tris.items():
-            export_tri_svg(tri[0], f"{OUT_DIR}/{ori}", tri[1], bb_size, h * 2 / sqrt(3), h, S, scale_factor, DEBUG)
+            export_tri_svg(
+                im=tri[0],
+                file_path=f"{OUT_DIR}/{ori}",
+                transform=tri[1],
+                bb_size=bb_size,
+                w=h * 2 / sqrt(3),
+                h=h,
+                S=S,
+                scale_factor=scale_factor,
+                DEBUG=is_debug,
+                is_flipped=is_flipped
+            )
 
-        if DEBUG:
-            # Debug triangle splitting masks
-            cv2.imwrite(f"{DEBUG_DIR}/mask_br.png", masks[0])
-            cv2.imwrite(f"{DEBUG_DIR}/mask_tl.png", masks[1])
-
+        if is_debug:
             cv2.imwrite(f"{DEBUG_DIR}/tri br_a.png", tris["br_a"][0])
 
             # Debug triangle outputs
