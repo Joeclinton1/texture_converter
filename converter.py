@@ -18,17 +18,6 @@ def apply_mask_to_alpha(im, mask):
     return im * alpha_mask
 
 
-def split_img_along_anti_diagonal(im):
-    br_mask = np.rot90(np.tri(*im.shape[:2], k=1, dtype=int)) * 255
-    tl_mask = np.rot90(br_mask, k=2)
-
-    br_mask, tl_mask = [cv2.resize(mask, im.shape[:2]) / 255 for mask in [br_mask, tl_mask]]
-    return {
-               "tl": apply_mask_to_alpha(im, tl_mask),
-               "br": apply_mask_to_alpha(im, br_mask)
-           }, (tl_mask, br_mask)
-
-
 def generate_STTF_from_image(im, original_h):
     w, h = im.shape[0], im.shape[1]
 
