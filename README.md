@@ -1,3 +1,6 @@
+> **Warning**
+This repository is no longer mantained, please use [this](https://github.com/Joeclinton1/texture-converter-js) instead
+
 # Texture converter
 Converts texture images to svg files for use in the Scratch project ["Stamped textured tri fill"](https://scratch.mit.edu/projects/723419988/)
 ## Installation
